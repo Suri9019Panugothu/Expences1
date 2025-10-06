@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Monthly Expenses — Simple App</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#6ee7b7; --muted:#94a3b8; --danger:#fb7185;
+      --glass: rgba(255,255,255,0.03);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#d6d8dd 0%, #041428 100%);color:#e6eef8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .app{width:100%;max-width:1000px}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+    header h1{margin:0;font-size:1.4rem}
+    .layout{display:grid;grid-template-columns:360px 1fr;gap:18px}
+    .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+
+    /* form */
+    form .row{display:flex;gap:8px;margin-bottom:8px}
+    label{display:block;font-size:0.82rem;color:var(--muted);margin-bottom:6px}
+    input,input[type=date],select{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit}
+    button{cursor:pointer;border:0;padding:10px 12px;border-radius:10px;background:var(--accent);color:#022; font-weight:600}
+    .muted{color:var(--muted);font-size:0.85rem}
+
+    /* list */
+    .list{margin-top:12px;max-height:520px;overflow:auto}
+    .item{display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:8px;margin-bottom:8px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);}
+    .meta{display:flex;align-items:center;gap:12px}
+    .badge{padding:6px 8px;border-radius:999px;font-size:0.78rem;background:rgba(255,255,255,0.03)}
+    .amount{font-weight:700}
+    .controls{display:flex;gap:8px}
+    .icon-btn{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:6px;border-radius:8px;color:var(--muted)}
+
+    /* summary */
+    .summary{display:flex;gap:12px;margin-bottom:10px}
+    .summary .s{flex:1;padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent)}
+    canvas{width:100%!important;height:200px!important}
+
+    /* responsive */
+    @media (max-width:880px){.layout{grid-template-columns:1fr;}.card{padding:12px}}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Monthly Expenses — Simple Tracker</h1>
+      <div class="muted">Save expenses locally in your browser. No backend required.</div>
+    </header>
+
+    <section class="layout">
+      <aside class="card" aria-labelledby="add-expense">
+        <h2 id="add-expense">Add Expense</h2>
+        <form id="expense-form">
+          <div class="row">
+            <div style="flex:1">
+              <label for="title">Person Name</label>
+              <input id="title" required maxlength="60" placeholder="Your Name" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1">
+              <label for="amount">Amount (₹)</label>
+              <input id="amount" type="number" step="0.01" min="0.01" required placeholder="e.g., 499.50"/>
+            </div>
+            <div style="width:140px">
+              <label for="date">Date</label>
+              <input id="date" type="date" required />
+            </div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1">
+              <label for="category">Category</label>
+              <select id="category">
+                <option value="Food">Food</option>
+                <option value="Transport">Transport</option>
+                <option value="Bills">Bills</option>
+                <option value="Shopping">Shopping</option>
+                <option value="Entertainment">Entertainment</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div style="width:120px;display:flex;align-items:flex-end">
+              <button id="add-btn">Add</button>
+            </div>
+          </div>
+
+          <div class="muted">Tip: Click an item to edit. Use filters below to view a specific month.</div>
+        </form>
+
+        <hr style="opacity:0.06;margin:12px 0" />
+        <div>
+          <label for="filter-month">Filter month</label>
+          <input id="filter-month" type="month" />
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="clear-filter" class="icon-btn">Clear</button>
+            <button id="export-csv" class="icon-btn">Export CSV</button>
+            <button id="reset-sample" class="icon-btn">Load Sample</button>
+          </div>
+        </div>
+      </aside>
+
+      <section>
+        <div class="card">
+          <div class="summary" aria-hidden="true">
+            <div class="s">
+              <div class="muted">Total this view</div>
+              <div id="total" style="font-size:1.6rem;font-weight:800">₹0.00</div>
+            </div>
+            <div class="s">
+              <div class="muted">Transactions</div>
+              <div id="count" style="font-size:1.6rem;font-weight:700">0</div>
+            </div>
+            <div class="s">
+              <div class="muted">Month</div>
+              <div id="current-month" style="font-size:1.2rem">All time</div>
+            </div>
+          </div>
+
+          <canvas id="chart" aria-label="expense chart" role="img"></canvas>
+
+          <div class="list" id="list" aria-live="polite"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    // Utilities
+    const $ = (id)=> document.getElementById(id);
+    const lsKey = 'monthly_expenses_v1';
+
+    // State
+    let expenses = load() || [];
+    let editingId = null;
+
+    // Elements
+    const form = $('expense-form');
+    const titleI = $('title');
+    const amountI = $('amount');
+    const dateI = $('date');
+    const categoryI = $('category');
+    const listEl = $('list');
+    const totalEl = $('total');
+    const countEl = $('count');
+    const currentMonthEl = $('current-month');
+    const filterMonth = $('filter-month');
+    const clearFilterBtn = $('clear-filter');
+    const exportCsvBtn = $('export-csv');
+    const resetSampleBtn = $('reset-sample');
+    const addBtn = $('add-btn');
+    const chartCanvas = document.getElementById('chart');
+
+    // Init defaults
+    if(!dateI.value){ const today = new Date(); dateI.value = today.toISOString().slice(0,10); }
+
+    // Form submit
+    form.addEventListener('submit', e=>{
+      e.preventDefault();
+      const title = titleI.value.trim();
+      const amount = parseFloat(amountI.value);
+      const date = dateI.value;
+      const category = categoryI.value;
+      if(!title || isNaN(amount) || amount<=0 || !date){ alert('Please fill valid title, amount, and date.'); return; }
+
+      if(editingId){
+        const idx = expenses.findIndex(x=>x.id===editingId);
+        if(idx>-1){ expenses[idx] = {...expenses[idx], title, amount, date, category}; editingId = null; addBtn.textContent = 'Add'; }
+      } else {
+        const id = cryptoRandomId();
+        expenses.push({id,title,amount,date,category,created: new Date().toISOString()});
+      }
+      save(); render(); form.reset(); dateI.value = new Date().toISOString().slice(0,10);
+    });
+
+    // List click (delegate for edit/delete)
+    listEl.addEventListener('click', e=>{
+      const id = e.target.closest('[data-id]')?.dataset?.id;
+      if(!id) return;
+      if(e.target.matches('.del')){ if(confirm('Delete this expense?')){ expenses = expenses.filter(x=>x.id!==id); save(); render(); } return; }
+      if(e.target.matches('.edit') || e.target.closest('.item')){
+        const item = expenses.find(x=>x.id===id);
+        if(!item) return;
+        editingId = id;
+        titleI.value = item.title; amountI.value = item.amount; dateI.value = item.date; categoryI.value = item.category; addBtn.textContent='Update';
+        window.scrollTo({top:0,behavior:'smooth'});
+      }
+    });
+
+    // Filters & utility buttons
+    clearFilterBtn.addEventListener('click', ()=>{ filterMonth.value=''; render(); });
+    exportCsvBtn.addEventListener('click', ()=>{ downloadCSV(filtered()); });
+    resetSampleBtn.addEventListener('click', ()=>{ if(confirm('Load sample data (replaces current)?')){ expenses = sampleData(); save(); render(); } });
+    filterMonth.addEventListener('change', ()=>render());
+
+    // Core functions
+    function render(){
+      const data = filtered();
+      listEl.innerHTML = '';
+      if(data.length===0){ listEl.innerHTML = '<div class="muted">No expenses for this selection.</div>'; }
+      data.sort((a,b)=> new Date(b.date) - new Date(a.date));
+      data.forEach(it=>{ const el = document.createElement('div'); el.className='item'; el.dataset.id = it.id; el.innerHTML = `
+        <div class="meta">
+          <div>
+            <div style="font-weight:700">${escapeHtml(it.title)}</div>
+            <div class="muted" style="font-size:0.85rem">${it.category} • ${formatDate(it.date)}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="amount">₹${formatNumber(it.amount)}</div>
+          <div class="controls">
+            <button class="icon-btn edit" title="Edit">✏️</button>
+            <button class="icon-btn del" title="Delete">🗑️</button>
+          </div>
+        </div>
+      `; listEl.appendChild(el); });
+
+      const total = data.reduce((s,x)=>s + Number(x.amount),0);
+      totalEl.textContent = `₹${formatNumber(total)}`;
+      countEl.textContent = data.length;
+      currentMonthEl.textContent = filterMonth.value ? monthLabel(filterMonth.value) : 'All time';
+      drawChart(data);
+    }
+
+    function filtered(){
+      if(!filterMonth.value) return [...expenses];
+      const [y,m] = filterMonth.value.split('-');
+      return expenses.filter(x=>{
+        const d = new Date(x.date); return d.getFullYear()===Number(y) && (d.getMonth()+1)===Number(m);
+      });
+    }
+
+    function save(){ localStorage.setItem(lsKey, JSON.stringify(expenses)); }
+    function load(){ try{ const raw = localStorage.getItem(lsKey); return raw? JSON.parse(raw): [];}catch(e){return []} }
+
+    function formatNumber(n){ return Number(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function formatDate(d){ const dt = new Date(d); return dt.toLocaleDateString(); }
+    function monthLabel(yM){ const [y,m]= yM.split('-'); return new Date(y,Number(m)-1,1).toLocaleString(undefined,{month:'long',year:'numeric'}); }
+
+    function downloadCSV(rows){ if(rows.length===0){ alert('No rows to export'); return; }
+      const headers = ['Title','Amount','Category','Date'];
+      const csv = [headers.join(',')].concat(rows.map(r=>[escapeCsv(r.title), r.amount, r.category, r.date].join(','))).join('\n');
+      const blob = new Blob([csv], {type:'text/csv'});
+      const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='expenses.csv'; a.click(); URL.revokeObjectURL(url);
+    }
+
+    function escapeCsv(s){ return '"'+String(s).replace(/"/g,'""')+'"'; }
+    function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // Simple canvas bar chart grouped by category
+    function drawChart(rows){ const ctx = chartCanvas.getContext('2d'); const w = chartCanvas.width = chartCanvas.clientWidth * devicePixelRatio; const h = chartCanvas.height = 220 * devicePixelRatio; ctx.clearRect(0,0,w,h);
+      if(rows.length===0){ ctx.fillStyle='#9aa8bd'; ctx.font = `${14*devicePixelRatio}px sans-serif`; ctx.fillText('No data to display', 12*devicePixelRatio, 50*devicePixelRatio); return; }
+      const byCat = {};
+      rows.forEach(r=> byCat[r.category] = (byCat[r.category]||0) + Number(r.amount));
+      const cats = Object.keys(byCat); const vals = cats.map(c=>byCat[c]);
+      const max = Math.max(...vals);
+      const padding = 28*devicePixelRatio; const barW = Math.max(18*devicePixelRatio, (w - padding*2) / cats.length * 0.6);
+      cats.forEach((c,i)=>{
+        const x = padding + i * ((w - padding*2)/cats.length) + ((w - padding*2)/cats.length - barW)/2;
+        const hBar = ( (vals[i] / max) * (h - padding*2) );
+        const y = h - padding - hBar;
+        ctx.fillStyle = '#6ee7b7';
+        roundRect(ctx, x, y, barW, hBar, 6*devicePixelRatio);
+        ctx.fill();
+        ctx.fillStyle = '#cbeee0'; ctx.font = `${11*devicePixelRatio}px sans-serif`; ctx.textAlign='center'; ctx.fillText('₹' + formatNumber(vals[i]), x + barW/2, y - 6*devicePixelRatio);
+        ctx.fillStyle = '#9aa8bd'; ctx.font = `${12*devicePixelRatio}px sans-serif`; ctx.fillText(c, x + barW/2, h - 6*devicePixelRatio);
+      });
+    }
+
+    function roundRect(ctx, x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r); ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath(); }
+
+    function cryptoRandomId(){ // small id for items
+      return 'e_' + Math.random().toString(36).slice(2,9);
+    }
+
+    function sampleData(){ return [
+      {id:cryptoRandomId(),title:'Grocery shopping',amount:1250.75,date: recent(-2),category:'Food'},
+      {id:cryptoRandomId(),title:'Bus pass',amount:450,date: recent(-10),category:'Transport'},
+      {id:cryptoRandomId(),title:'Electricity bill',amount:2200,date: recent(-20),category:'Bills'},
+      {id:cryptoRandomId(),title:'Phone recharge',amount:199,date: recent(-5),category:'Bills'},
+      {id:cryptoRandomId(),title:'Movie night',amount:399,date: recent(-15),category:'Entertainment'}
+    ]; }
+    function recent(daysAgo){ const d = new Date(); d.setDate(d.getDate()+daysAgo); return d.toISOString().slice(0,10); }
+
+    // Init on load
+    render();
+
+    // helpful: expose to console for debugging
+    window._expenses = { get: ()=>expenses, save, load, clear: ()=>{localStorage.removeItem(lsKey); expenses=[]; render();} };
+  </script>
+</body>
+</html>
